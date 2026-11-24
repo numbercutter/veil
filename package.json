@@ -1,0 +1,15 @@
+{
+  "name": "@numbercutter/veil",
+  "version": "0.1.0",
+  "description": "Mask personal data before it reaches a model and restore it after.",
+  "type": "module",
+  "license": "MIT",
+  "author": "numbercutter",
+  "repository": { "type": "git", "url": "https://github.com/numbercutter/veil" },
+  "module": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "bin": { "veil": "src/cli.ts" },
+  "files": ["src", "README.md", "LICENSE"],
+  "engines": { "bun": ">=1.1.0" },
+  "scripts": { "example": "bun examples/proxy.ts" }
+}

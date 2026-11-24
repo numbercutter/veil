@@ -1,0 +1,4 @@
+node_modules/
+.veil/
+*.jsonl
+.DS_Store
