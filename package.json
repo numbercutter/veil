@@ -1,6 +1,6 @@
 {
   "name": "@numbercutter/veil",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Mask personal data before it reaches a model and restore it after.",
   "type": "module",
   "license": "MIT",

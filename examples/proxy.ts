@@ -26,8 +26,8 @@ const response = await fetch(`${proxy.url}v1/chat/completions`, {
 const reply = (await response.json()) as any;
 
 console.log("app sent:\n ", message);
-console.log("\nupstream saw:\n ", upstream.seen[0].messages[0].content);
-console.log("  auth header passed through:", upstream.seen[0].authorization);
+console.log("\nupstream saw:\n ", upstream.seen[0].body.messages[0].content);
+console.log("  auth header passed through:", upstream.seen[0].headers.authorization);
 console.log("\napp got back:\n ", reply.choices[0].message.content);
 console.log(`\nraw values in upstream traffic: ${["maria", "4242 4242", "123-45-6789", "203.0.113"].filter((v) => JSON.stringify(upstream.seen).toLowerCase().includes(v)).length}`);
 

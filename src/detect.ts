@@ -1,4 +1,4 @@
-export type EntityType = "EMAIL" | "PHONE" | "SSN" | "CARD" | "IP" | "IBAN" | "NAME" | "TERM";
+export type EntityType = "EMAIL" | "PHONE" | "SSN" | "CARD" | "IP" | "IBAN" | "DOB" | "ADDRESS" | "NINO" | "NAME" | "TERM";
 
 export type Match = { type: EntityType; start: number; end: number; value: string };
 
@@ -11,6 +11,13 @@ const PHONE_NA = /(?<![\w+])(?:\+?1[\s.-]?)?(?:\(\d{3}\)\s?|\d{3}[\s.-])\d{3}[\s
 const PHONE_INTL = /(?<![\w+])\+\d{1,3}(?:[\s.-]?(?:\(\d{1,4}\)|\d{1,4})){2,5}(?![\w-])/g;
 const IPV4 = /(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\d.]*\d)/g;
 const IBAN = /\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?\b/g;
+const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
+const DATE = `(?:\\d{1,2}[/.-]\\d{1,2}[/.-](?:\\d{4}|\\d{2})|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTH}\\s+\\d{4}|${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{4})`;
+const DOB = new RegExp(`\\b(?:DOB|D\\.O\\.B\\.?|date\\s+of\\s+birth|birth\\s*date|born(?:\\s+on)?)\\s*(?:[:=-]|is|was)?\\s*(${DATE})(?![\\d/.-]*\\d)`, "gi");
+const SUFFIX = "(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl|Terrace|Ter|Parkway|Pkwy|Circle|Cir|Highway|Hwy|Square|Sq|Trail|Trl)";
+const UNIT = "(?:,?[ \\t]*(?:Apt|Apartment|Suite|Ste|Unit|#)\\.?[ \\t]*[A-Za-z0-9-]+)?";
+const ADDRESS = new RegExp(`(?<![\\w.,-])\\d{1,6}[A-Za-z]?(?:-\\d{1,4})?[ \\t]+(?:[NSEW]\\.?[ \\t]+)?(?:\\d{1,3}(?:st|nd|rd|th)|[A-Z][a-z]+)(?:[ \\t]+[A-Z][a-z]+){0,3}[ \\t]+${SUFFIX}\\b\\.?(?:[ \\t]+(?:NE|NW|SE|SW|N|S|E|W)\\b\\.?)?${UNIT}`, "g");
+const NINO = /(?<![A-Za-z0-9])(?!BG|GB|KN|NK|NT|TN|ZZ)[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z] ?\d{2} ?\d{2} ?\d{2} ?[A-D](?![A-Za-z0-9])/g;
 
 export function luhn(digits: string): boolean {
   let sum = 0;
@@ -40,6 +47,25 @@ function collect(text: string, pattern: RegExp, type: EntityType, accept: (value
   const found: Match[] = [];
   for (const match of text.matchAll(pattern)) {
     if (accept(match[0])) found.push({ type, start: match.index!, end: match.index! + match[0].length, value: match[0] });
+  }
+  return found;
+}
+
+export function plausibleDate(text: string): boolean {
+  const numeric = /^(\d{1,4})[/.-](\d{1,2})[/.-](\d{1,4})$/.exec(text);
+  if (!numeric) return true;
+  const [a, b, c] = numeric.slice(1).map(Number);
+  const [day, month] = numeric[1].length === 4 ? [c, b] : a > 12 ? [a, b] : b > 12 ? [b, a] : [a, b];
+  return month >= 1 && month <= 12 && day >= 1 && day <= 31;
+}
+
+function birthDates(text: string): Match[] {
+  const found: Match[] = [];
+  for (const match of text.matchAll(DOB)) {
+    const value = match[1];
+    if (!plausibleDate(value)) continue;
+    const start = match.index! + match[0].lastIndexOf(value);
+    found.push({ type: "DOB", start, end: start + value.length, value });
   }
   return found;
 }
@@ -82,6 +108,9 @@ export function detect(text: string, options: DetectOptions = {}): Match[] {
       return digits >= 8 && digits <= 15;
     }),
     ...collect(text, IPV4, "IP"),
+    ...birthDates(text),
+    ...collect(text, ADDRESS, "ADDRESS"),
+    ...collect(text, NINO, "NINO"),
     ...listed(text, options.names, "NAME"),
     ...listed(text, options.terms, "TERM"),
   ];
@@ -101,7 +130,12 @@ export function normalize(type: EntityType, value: string): string {
     case "EMAIL":
     case "NAME":
     case "TERM":
+    case "ADDRESS":
       return value.toLowerCase().replace(/\s+/g, " ");
+    case "NINO":
+      return value.replace(/\s/g, "").toUpperCase();
+    case "DOB":
+      return value.toLowerCase().replace(/\s+/g, " ").replace(/,/g, "");
     case "PHONE": {
       const digits = value.replace(/\D/g, "");
       return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;

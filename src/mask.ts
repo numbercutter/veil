@@ -71,8 +71,51 @@ export function mask(text: string, options: MaskOptions = {}): MaskResult {
   return { text: out + text.slice(cursor), session, found };
 }
 
-export function unmask(text: string, session: Session): string {
-  return text.replace(PLACEHOLDER, (placeholder) => session.lookup(placeholder) ?? placeholder);
+export type UnmaskOptions = { json?: boolean };
+
+export function unmask(text: string, session: Session, options: UnmaskOptions = {}): string {
+  return text.replace(PLACEHOLDER, (placeholder) => {
+    const value = session.lookup(placeholder);
+    if (value === undefined) return placeholder;
+    return options.json ? JSON.stringify(value).slice(1, -1) : value;
+  });
+}
+
+const PARTIAL = /⟦[A-Z]*(?:_\d*)?$/;
+const LONGEST_PLACEHOLDER = 32;
+
+export class StreamUnmasker {
+  private held = "";
+  readonly restored: string[] = [];
+
+  constructor(
+    private readonly session: Session,
+    private readonly options: UnmaskOptions = {},
+  ) {}
+
+  push(chunk: string): string {
+    const text = this.held + chunk;
+    const open = text.lastIndexOf("⟦");
+    const tail = open >= 0 ? text.slice(open) : "";
+    const cut = open >= 0 && tail.length <= LONGEST_PLACEHOLDER && PARTIAL.test(tail) ? open : text.length;
+    this.held = text.slice(cut);
+    return this.release(text.slice(0, cut));
+  }
+
+  flush(): string {
+    const text = this.held;
+    this.held = "";
+    return this.release(text);
+  }
+
+  get pending(): boolean {
+    return this.held.length > 0;
+  }
+
+  private release(text: string): string {
+    this.restored.push(...placeholders(text));
+    return unmask(text, this.session, this.options);
+  }
 }
 
 export function placeholders(text: string): string[] {

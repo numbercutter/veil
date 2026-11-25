@@ -9,7 +9,7 @@ const usage = `veil: mask personal data before it reaches a model
 
 usage:
   veil mask [TEXT] [--names A,B] [--terms X,Y] [--json]   reads stdin when TEXT is omitted
-  veil serve [--upstream URL] [--port 8787] [--host 127.0.0.1] [--names A,B] [--terms X,Y]
+  veil serve [--upstream URL] [--anthropic-upstream URL] [--port 8787] [--host 127.0.0.1] [--names A,B] [--terms X,Y]
   veil verify-log [PATH]
 
 options:
@@ -17,8 +17,9 @@ options:
   --log PATH   audit log path (default <dir>/audit.jsonl)
 
 env:
-  VEIL_UPSTREAM   OpenAI-compatible base URL including /v1, e.g. https://api.openai.com/v1
-  VEIL_AUDIT_KEY  key for hashing values in the audit log (default <dir>/audit.key)`;
+  VEIL_UPSTREAM            OpenAI-compatible base URL including /v1, e.g. https://api.openai.com/v1
+  VEIL_ANTHROPIC_UPSTREAM  Anthropic base URL including /v1, e.g. https://api.anthropic.com/v1
+  VEIL_AUDIT_KEY           key for hashing values in the audit log (default <dir>/audit.key)`;
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -27,6 +28,7 @@ const { values, positionals } = parseArgs({
     dir: { type: "string" },
     log: { type: "string" },
     upstream: { type: "string" },
+    "anthropic-upstream": { type: "string" },
     port: { type: "string" },
     host: { type: "string" },
     names: { type: "string" },
@@ -60,17 +62,21 @@ switch (command) {
     break;
   }
   case "serve": {
-    const upstream = values.upstream ?? process.env.VEIL_UPSTREAM ?? fail("set --upstream or VEIL_UPSTREAM");
+    const upstream = values.upstream ?? process.env.VEIL_UPSTREAM;
+    const anthropicUpstream = values["anthropic-upstream"] ?? process.env.VEIL_ANTHROPIC_UPSTREAM;
+    if (!upstream && !anthropicUpstream) fail("set --upstream / VEIL_UPSTREAM, --anthropic-upstream / VEIL_ANTHROPIC_UPSTREAM, or both");
     const log = new AuditLog(logPath, loadAuditKey(dir));
     const server = serveProxy({
       upstream,
+      anthropicUpstream,
       log,
       port: values.port ? Number(values.port) : undefined,
       hostname: values.host,
       names: list(values.names),
       terms: list(values.terms),
     });
-    console.log(`veil on ${server.url}v1/chat/completions -> ${upstream}`);
+    if (upstream) console.log(`veil on ${server.url}v1/chat/completions -> ${upstream}`);
+    if (anthropicUpstream) console.log(`veil on ${server.url}v1/messages -> ${anthropicUpstream}`);
     console.log(`audit log ${logPath}`);
     break;
   }
